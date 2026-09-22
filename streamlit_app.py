@@ -22,7 +22,7 @@ st.set_page_config(
 )
 
 
-@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+@st.cache_data(ttl=6 * 60 * 60, max_entries=1, show_spinner=False)
 def load_sdge_pricing():
     """Download and parse SDG&E's current-year NBT MIDAS pricing file."""
     response = requests.get(DATA_URL, timeout=60)
@@ -42,7 +42,15 @@ def load_sdge_pricing():
         csv_name = candidates[0] if candidates else csv_files[0]
 
         with archive.open(csv_name) as f:
-            df = pd.read_csv(f)
+            # Read only columns used by the app. The SDG&E source file contains
+            # many forecast years, so avoiding unused columns cuts peak memory.
+            df = pd.read_csv(
+                f,
+                usecols=[
+                    "RIN", "RateName", "DateStart", "TimeStart",
+                    "ValueName", "Value", "Unit",
+                ],
+            )
 
     required = {
         "RIN", "RateName", "DateStart", "TimeStart",
@@ -83,6 +91,15 @@ def load_sdge_pricing():
     df["weekend_or_holiday"] = (
         df["ValueName"].astype(str).str.contains("Weekend", case=False, na=False)
     )
+
+    # This app only displays the first/current pricing year.  The SDG&E file
+    # also contains many future forecast years, which are unnecessary here and
+    # consume most of the memory if they are kept in the Streamlit cache.
+    pricing_year = int(df["local_dt"].dt.year.min())
+    df = df.loc[
+        df["local_dt"].dt.year.eq(pricing_year),
+        ["local_dt", "component", "Value", "weekend_or_holiday"],
+    ].copy()
 
     downloaded_at = datetime.now(ZoneInfo(PACIFIC_TZ))
     return df, csv_name, rate_names[0], downloaded_at
@@ -158,12 +175,7 @@ def build_hourly(df, customer_type):
 
 
 def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
-    heatmap = hourly.pivot_table(
-        index="hour",
-        columns="date",
-        values="plot_value",
-        aggfunc="mean",  # Handles repeated 1 AM when daylight saving time ends.
-    ).sort_index()
+    heatmap = hourly.pivot_table(index="hour", columns="date", values="plot_value",aggfunc="mean",).sort_index()
     dates = list(heatmap.columns)
     hours = list(heatmap.index)
 
@@ -178,7 +190,7 @@ def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
     cmap = plt.get_cmap("turbo", len(bounds) - 1)
     norm = BoundaryNorm(bounds, cmap.N, clip=True)
 
-    fig_width = min(24, max(12, 0.31 * len(dates)))
+    fig_width = min(18, max(12, 0.31 * len(dates)))
     fig, ax = plt.subplots(figsize=(fig_width, 7))
     image = ax.imshow(
         heatmap.to_numpy(),
@@ -255,6 +267,7 @@ def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
             linewidth=2.2,
         )
 
+
     fig.tight_layout()
     return fig
 
@@ -302,7 +315,7 @@ except Exception as exc:
     st.stop()
 
 pricing_year = int(data["local_dt"].dt.year.min())
-year_data = data[data["local_dt"].dt.year == pricing_year].copy()
+year_data = data
 available_months = sorted(year_data["local_dt"].dt.month.unique())
 
 now = datetime.now(ZoneInfo(PACIFIC_TZ))
@@ -367,12 +380,15 @@ else:
     st.caption("Bundled/non-CCA view: Generation + Delivery export compensation is combined.")
 
 fig = make_heatmap(hourly, threshold, value_label, highlight_special_days)
-st.pyplot(fig, use_container_width=True)
 
+# Render the figure only once.  Using the same PNG for display and download
+# avoids having Streamlit render the Matplotlib figure and then rendering it
+# again for the download button.
 png_buffer = io.BytesIO()
-fig.savefig(png_buffer, format="png", dpi=200, bbox_inches="tight")
-png_buffer.seek(0)
+fig.savefig(png_buffer, format="png", dpi=150, bbox_inches="tight")
 plt.close(fig)
+png_bytes = png_buffer.getvalue()
+st.image(png_bytes, use_container_width=True)
 
 st.caption(
     f"Color bands are $0.10/kWh wide. The break-even marker is ${threshold:.2f}/kWh. "
@@ -385,7 +401,7 @@ st.dataframe(summary, hide_index=True, use_container_width=True)
 
 st.download_button(
     "Download heat map (PNG)",
-    data=png_buffer,
+    data=png_bytes,
     file_name=f"sdge_export_heatmap_{pricing_year}.png",
     mime="image/png",
 )
