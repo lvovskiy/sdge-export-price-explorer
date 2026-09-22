@@ -173,7 +173,7 @@ def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
     cmap = plt.get_cmap("turbo", len(bounds) - 1)
     norm = BoundaryNorm(bounds, cmap.N, clip=True)
 
-    fig_width = max(12, 0.31 * len(dates))
+    fig_width = min(24, max(12, 0.31 * len(dates)))
     fig, ax = plt.subplots(figsize=(fig_width, 7))
     image = ax.imshow(
         heatmap.to_numpy(),
@@ -215,12 +215,21 @@ def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
     ax.grid(which="minor", linewidth=0.20)
     ax.tick_params(which="minor", bottom=False, left=False)
 
-    selected_months = list(dict.fromkeys(pd.Timestamp(d).strftime("%B") for d in dates))
-    title_months = "–".join(selected_months) if len(selected_months) <= 2 else ", ".join(selected_months)
-    year = pd.Timestamp(dates[0]).year
-    ax.set_title(f"SDG&E Solar Export Price — {title_months} {year}")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Hour of day (Pacific time)")
+    selected_months = list(
+    dict.fromkeys(pd.Timestamp(d).strftime("%B") for d in dates))
+
+    if len(selected_months) == 12:
+        title_months = "Full Year"
+    elif len(selected_months) == 1:
+        title_months = selected_months[0]
+    elif len(selected_months) == 2:
+        title_months = "–".join(selected_months)
+    else:
+        title_months = f"{selected_months[0]}–{selected_months[-1]}"
+        year = pd.Timestamp(dates[0]).year
+        ax.set_title(f"SDG&E Solar Export Price — {title_months} {year}")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Hour of day (Pacific time)")
 
     cbar = fig.colorbar(
         image,
