@@ -158,7 +158,7 @@ def build_hourly(df, customer_type):
 
 
 def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
-    heatmap = hourly.pivot(index="hour", columns="date", values="plot_value").sort_index()
+    heatmap = hourly.pivot_table(index="hour", columns="date", values="plot_value",aggfunc="mean",).sort_index()
     dates = list(heatmap.columns)
     hours = list(heatmap.index)
 
