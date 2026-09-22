@@ -158,7 +158,12 @@ def build_hourly(df, customer_type):
 
 
 def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
-    heatmap = hourly.pivot_table(index="hour", columns="date", values="plot_value",aggfunc="mean",).sort_index()
+    heatmap = hourly.pivot_table(
+        index="hour",
+        columns="date",
+        values="plot_value",
+        aggfunc="mean",  # Handles repeated 1 AM when daylight saving time ends.
+    ).sort_index()
     dates = list(heatmap.columns)
     hours = list(heatmap.index)
 
@@ -215,21 +220,23 @@ def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
     ax.grid(which="minor", linewidth=0.20)
     ax.tick_params(which="minor", bottom=False, left=False)
 
-    selected_months = list(
-    dict.fromkeys(pd.Timestamp(d).strftime("%B") for d in dates))
+    month_names_in_plot = list(dict.fromkeys(
+        pd.Timestamp(d).strftime("%B") for d in dates
+    ))
 
-    if len(selected_months) == 12:
+    if len(month_names_in_plot) == 12:
         title_months = "Full Year"
-    elif len(selected_months) == 1:
-        title_months = selected_months[0]
-    elif len(selected_months) == 2:
-        title_months = "–".join(selected_months)
+    elif len(month_names_in_plot) == 1:
+        title_months = month_names_in_plot[0]
+    elif len(month_names_in_plot) == 2:
+        title_months = "–".join(month_names_in_plot)
     else:
-        title_months = f"{selected_months[0]}–{selected_months[-1]}"
-        year = pd.Timestamp(dates[0]).year
-        ax.set_title(f"SDG&E Solar Export Price — {title_months} {year}")
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Hour of day (Pacific time)")
+        title_months = f"{month_names_in_plot[0]}–{month_names_in_plot[-1]}"
+
+    year = pd.Timestamp(dates[0]).year
+    ax.set_title(f"SDG&E Solar Export Price — {title_months} {year}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Hour of day (Pacific time)")
 
     cbar = fig.colorbar(
         image,
@@ -246,22 +253,6 @@ def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
             threshold,
             color="black",
             linewidth=2.2,
-        )
-
-        cbar.ax.text(
-            0.5,
-            -0.06,
-            f"Break-even: ${threshold:.2f}",
-            ha="center",
-            va="top",
-            transform=cbar.ax.transAxes,
-            fontsize=10,
-            bbox=dict(
-                boxstyle="round,pad=0.2",
-                facecolor="white",
-                alpha=0.85,
-                edgecolor="none",
-            ),
         )
 
     fig.tight_layout()
