@@ -232,19 +232,28 @@ def make_heatmap(hourly, threshold, value_label, highlight_special_days=True):
     cbar.set_label(value_label)
     cbar.ax.set_yticklabels([f"${value:.1f}" for value in bounds])
 
-if lower <= threshold <= upper:
-    cbar.ax.axhline(threshold, linewidth=2.2)
+    if lower <= threshold <= upper:
+        cbar.ax.axhline(
+            threshold,
+            color="black",
+            linewidth=2.2,
+        )
 
-    cbar.ax.text(
-        0.5,
-        -0.06,
-        f"Break-even: ${threshold:.2f}",
-        ha="center",
-        va="top",
-        transform=cbar.ax.transAxes,
-        fontsize=10,
-        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.85, edgecolor="none"),
-    )
+        cbar.ax.text(
+            0.5,
+            -0.06,
+            f"Break-even: ${threshold:.2f}",
+            ha="center",
+            va="top",
+            transform=cbar.ax.transAxes,
+            fontsize=10,
+            bbox=dict(
+                boxstyle="round,pad=0.2",
+                facecolor="white",
+                alpha=0.85,
+                edgecolor="none",
+            ),
+        )
 
     fig.tight_layout()
     return fig
